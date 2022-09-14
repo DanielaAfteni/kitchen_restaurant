@@ -1,0 +1,29 @@
+{
+    "cooks": [
+      {
+        "rank": 3,
+        "proficiency": 4,
+        "name": "Gordon Ramsay",
+        "catch-phrase": "Hey, panini head, are you listening to me?"
+      },
+      {
+        "rank": 2,
+        "proficiency": 3,
+        "name": "Igor Dodon",
+        "catch-phrase": "Oameni buni!"
+      },
+      {
+        "rank": 2,
+        "proficiency": 2,
+        "name": "Maia Sandu",
+        "catch-phrase": "Scapam de coruptie."
+      },
+      {
+        "rank": 1,
+        "proficiency": 2,
+        "name": "LaLa Land",
+        "catch-phrase": "Mergem la mare!!!"
+      }
+    ]
+  }
+  
