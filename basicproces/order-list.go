@@ -15,6 +15,7 @@ import (
 type OrderList struct {
 	Distributions     map[int]*Distribution
 	ReceiveOrder      <-chan Order
+	RandOrderChan     chan Order
 	ReceiveCookedFood chan FoodOrder
 	Cooks             []*Cook
 	Menu              Menu
@@ -25,9 +26,10 @@ type CooksDetails struct {
 }
 
 func NewOrderList(receiveOrder <-chan Order, menu Menu) *OrderList {
-	ol := &OrderList{
+	orderl := &OrderList{
 		Distributions:     make(map[int]*Distribution),
 		ReceiveOrder:      receiveOrder,
+		RandOrderChan:     make(chan Order),
 		ReceiveCookedFood: make(chan FoodOrder),
 		Menu:              menu,
 	}
@@ -44,50 +46,50 @@ func NewOrderList(receiveOrder <-chan Order, menu Menu) *OrderList {
 	// we use the Unmarshal() function in package encoding/json - to unpack or decode the data from JSON to a struct (cooksDetails).
 	json.Unmarshal(byteValue, &cooksDetails)
 
-	ol.Cooks = make([]*Cook, len(cooksDetails.Cooks))
+	orderl.Cooks = make([]*Cook, len(cooksDetails.Cooks))
 	// we are looping over the indexes and elements in details about the cooks (especially its name)
 	for i, cookDetails := range cooksDetails.Cooks {
-		ol.Cooks[i] = NewCook(i, cookDetails, ol.ReceiveCookedFood, ol.Menu)
+		orderl.Cooks[i] = NewCook(i, cookDetails, orderl.ReceiveCookedFood, orderl.Menu)
 		// Gordon Ramsay entered the kitchen cook_id=0
 		// <specific cook> entered the kitchen <its specific id>
-		log.Info().Int("cook_id", i).Msgf("%s entered the kitchen", cookDetails.Name)
+		log.Info().Int("cookId", i).Msgf("In the kitchen is present %s", cookDetails.Name)
 	}
 
-	return ol
+	return orderl
 }
 
 // function to run order list
-func (ol *OrderList) Run() {
+func (orderl *OrderList) Run() {
 	// have 2 calls of food being cooked
-	go ol.SendFoodOrderToCooks()
+	go orderl.SendFoodOrderToCooks()
 	// and food coming back from the cook
-	go ol.ReceiveFoodOrderFromCooks()
+	go orderl.ReceiveFoodOrderFromCooks()
 }
 
-func (ol *OrderList) SendFoodOrderToCooks() {
+func (orderl *OrderList) SendFoodOrderToCooks() {
 	// we are looping over elements in received order
-	for order := range ol.ReceiveOrder {
+	for order := range orderl.ReceiveOrder {
 		// we take the values and variables which were distributed
-		ol.Distributions[order.OrderId] = &Distribution{
+		orderl.Distributions[order.OrderId] = &Distribution{
 			Order:          order,
 			CookingTime:    time.Now().UnixMilli(),
 			CookingDetails: make([]CookingDetail, 0),
 			ReceivedItems:  make([]bool, len(order.Items)),
 		}
 		// show that the kitchen received order
-		log.Info().Int("order_id", order.OrderId).Msg("The kitchen received order")
+		log.Info().Int("orderId", order.OrderId).Msg("The kitchen received order")
 		// we are looping over elements in order items
 		for i, id := range order.Items {
 			// take the food
-			food := ol.Menu.Foods[id-1]
+			food := orderl.Menu.Foods[id-1]
 			// and set the Sent food as false
 			IsFoodOrderSent := false
 			// untill the sent food is true, we are doing:
 			for !IsFoodOrderSent {
 				// we are looping over elements in order list cooks
-				for _, cook := range ol.Cooks {
+				for _, cook := range orderl.Cooks {
 					// in case if the cook can cook
-					if cook.CanCook(food) {
+					if cook.MaybeCanCook(food) {
 						// take the corresponding food
 						foodOrder := FoodOrder{
 							OrderId: order.OrderId,
@@ -102,7 +104,7 @@ func (ol *OrderList) SendFoodOrderToCooks() {
 						// start cooking
 						go cook.CookFood(foodOrder)
 						// show that food is assigned to a cook
-						log.Info().Int("order_id", order.OrderId).Int("item_id", i).Int("food_id", food.Id).Int("cook_id", cook.Id).Msgf("%s order assigned to %s", food.Name, cook.Name)
+						log.Info().Int("orderId", order.OrderId).Int("itemId", i).Int("foodId", food.Id).Int("cookId", cook.Id).Msgf("%s order assigned to the cook %s", food.Name, cook.Name)
 						// set that food is done
 						IsFoodOrderSent = true
 						break
@@ -114,21 +116,21 @@ func (ol *OrderList) SendFoodOrderToCooks() {
 }
 
 // function for food coming back from the cook
-func (ol *OrderList) ReceiveFoodOrderFromCooks() {
+func (orderl *OrderList) ReceiveFoodOrderFromCooks() {
 	// we are looping over elements in cooked order by cook
-	for foodOrder := range ol.ReceiveCookedFood {
+	for foodOrder := range orderl.ReceiveCookedFood {
 		// set a distribution for the food to the order
-		distribution := ol.Distributions[foodOrder.OrderId]
+		distribution := orderl.Distributions[foodOrder.OrderId]
 		// in case if the food is wrong
 		if distribution.Order.Items[foodOrder.ItemId] != foodOrder.FoodId {
 			// then we show that
-			log.Warn().Int("order_id", foodOrder.OrderId).Int("item_id", foodOrder.ItemId).Msg("There is a received wrong food item")
+			log.Warn().Int("orderId", foodOrder.OrderId).Int("itemId", foodOrder.ItemId).Msg("There is a received wrong food item")
 			continue
 		}
 		// in case if the food is already received
 		if distribution.ReceivedItems[foodOrder.ItemId] {
 			// then we show that
-			log.Warn().Int("order_id", foodOrder.OrderId).Int("item_id", foodOrder.ItemId).Msg("There is a food item already received")
+			log.Warn().Int("orderId", foodOrder.OrderId).Int("itemId", foodOrder.ItemId).Msg("There is a food item already received")
 			continue
 		}
 		// set the food - received
@@ -137,6 +139,7 @@ func (ol *OrderList) ReceiveFoodOrderFromCooks() {
 		distribution.CookingDetails = append(distribution.CookingDetails, foodOrder.CookingDetail)
 		//if the length of the CookingDetails are the same as the nr of items
 		if len(distribution.CookingDetails) == len(distribution.Order.Items) {
+			// send distribution to the dining hall
 			distribution.CookingTime = (time.Now().UnixMilli() - distribution.CookingTime) / int64(scfg.TimeUnit)
 			jsonBody, err := json.Marshal(distribution)
 			if err != nil {
@@ -147,8 +150,8 @@ func (ol *OrderList) ReceiveFoodOrderFromCooks() {
 			if err != nil {
 				log.Fatal().Err(err).Msg("Error sending distribution to dining hall")
 			}
-			log.Info().Int("order_id", foodOrder.OrderId).Msg("Distribution sent to dining hall")
-			delete(ol.Distributions, foodOrder.OrderId)
+			log.Info().Int("orderId", foodOrder.OrderId).Msg("Distribution sent to dining hall")
+			delete(orderl.Distributions, foodOrder.OrderId)
 		}
 	}
 }

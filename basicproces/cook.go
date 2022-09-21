@@ -52,7 +52,7 @@ func NewCook(id int, cookDetails CookDetails, sendChan chan<- FoodOrder, menu Me
 }
 
 // boolean function for determination if the cook can cook
-func (c *Cook) CanCook(food Food) bool {
+func (c *Cook) MaybeCanCook(food Food) bool {
 	// if Proficiency bigger than Occupation
 	isFree := atomic.LoadInt64(&c.Occupation) < c.Proficiency
 	// if Rank bigger or equal than Complexity of the food
@@ -67,14 +67,14 @@ func (c *Cook) CookFood(foodOrder FoodOrder) {
 	// if Complexity bigger than Rank
 	if food.Complexity > c.Rank {
 		//it means that cooker is not qualified
-		log.Warn().Int("cook_id", c.Id).Msgf("%s is not qualified to cook %s", c.Name, food.Name)
+		log.Warn().Int("cookId", c.Id).Msgf("%s is not qualified to cook %s", c.Name, food.Name)
 		atomic.AddInt64(&c.Occupation, -1)
 		return
 	}
 	// if Occupation bigger than Proficiency
 	if atomic.LoadInt64(&c.Occupation) > c.Proficiency {
 		// it means that the cook is too busy
-		log.Warn().Int("cook_id", c.Id).Msgf("%s is too busy", c.Name)
+		log.Warn().Int("cookId", c.Id).Msgf("%s is too busy", c.Name)
 		atomic.AddInt64(&c.Occupation, -1)
 		return
 	}
@@ -83,7 +83,7 @@ func (c *Cook) CookFood(foodOrder FoodOrder) {
 	// sleep a bit at preparation time
 	time.Sleep(preparationTime)
 	// show that the food was cooked by the cook
-	log.Info().Int("cook_id", c.Id).Int("food_id", foodOrder.FoodId).Int("order_id", foodOrder.OrderId).Msgf("%s cooked %s", c.Name, food.Name)
+	log.Info().Int("cookId", c.Id).Int("foodId", foodOrder.FoodId).Int("orderId", foodOrder.OrderId).Msgf("%s cooked %s", c.Name, food.Name)
 	// send data to the finally prepared food
 	c.SendCookedFood <- foodOrder
 	atomic.AddInt64(&c.Occupation, -1)
