@@ -11,7 +11,7 @@ $ docker compose up --build
 ```
 ## Run the app in the Terminal
 
-Firstly there is required to switch: `"dining_hall_url": "http://localhost:8080"` in `config/scfg.json`.
+Firstly there is required to switch: `"dining_hall_url": "http://localhost:8081/order"` in `main.go`.
 
 Then to run in the Terminal:
 
